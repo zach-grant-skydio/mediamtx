@@ -159,6 +159,24 @@ func New(
 			Parent:             parent,
 		}
 
+	case *format.Generic:
+		// Check if this is a KLV stream (based on format name or other identifiers)
+		if forma.PayloadType() == 96 { // Common dynamic payload type for KLV
+			proc = &klv{
+				UDPMaxPayloadSize:  udpMaxPayloadSize,
+				Format:            forma,
+				GenerateRTPPackets: generateRTPPackets,
+				Parent:            parent,
+			}
+		} else {
+			proc = &generic{
+				UDPMaxPayloadSize:  udpMaxPayloadSize,
+				Format:            forma,
+				GenerateRTPPackets: generateRTPPackets,
+				Parent:            parent,
+			}
+		}
+
 	default:
 		proc = &generic{
 			UDPMaxPayloadSize:  udpMaxPayloadSize,
