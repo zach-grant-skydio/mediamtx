@@ -655,3 +655,68 @@ func TestRecorderFMP4SegmentSwitch(t *testing.T) {
 
 	require.Equal(t, 2, n)
 }
+
+func TestRecorderMPEGTS(t *testing.T) {
+	desc := &description.Session{Medias: []*description.Media{
+		{
+			Type: description.MediaTypeVideo,
+			Formats: []rtspformat.Format{&rtspformat.MPEGTS{}},
+		},
+	}}
+
+	strm := &stream.Stream{
+		WriteQueueSize:    512,
+		RTPMaxPayloadSize: 1450,
+		Desc:              desc,
+		GenerateRTPPackets: true,
+		Parent:            test.NilLogger,
+	}
+	err := strm.Initialize()
+	require.NoError(t, err)
+	defer strm.Close()
+
+	dir, err := os.MkdirTemp("", "mediamtx-recorder")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	w := &Recorder{
+		PathFormat:      filepath.Join(dir, "%path/%Y-%m-%d_%H-%M-%S-%f"),
+		Format:          conf.RecordFormatMPEGTS,
+		PartDuration:    1 * time.Second,
+		SegmentDuration: 1 * time.Second,
+		PathName:        "mypath",
+		Stream:          strm,
+		Parent:          test.NilLogger,
+	}
+	w.Initialize()
+
+	// Test MPEG-TS data with typical STANAG 4609 payload (7 x 188-byte packets)
+	testData := make([]byte, 7*188)
+	for i := 0; i < 7; i++ {
+		testData[i*188] = 0x47 // MPEG-TS sync byte
+	}
+
+	strm.WriteUnit(desc.Medias[0], desc.Medias[0].Formats[0], &unit.MPEGTS{
+		Base: unit.Base{
+			NTP: time.Now(),
+			PTS: 0,
+		},
+		Data: testData,
+	})
+
+	time.Sleep(100 * time.Millisecond)
+
+	w.Close()
+
+	// Verify that MPEG-TS file was created
+	files, err := filepath.Glob(filepath.Join(dir, "mypath", "*.ts"))
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(files), 1, "Expected at least one .ts file to be created")
+
+	// Verify file is not empty
+	if len(files) > 0 {
+		info, err := os.Stat(files[0])
+		require.NoError(t, err)
+		require.Greater(t, info.Size(), int64(0), "MPEG-TS file should not be empty")
+	}
+}
