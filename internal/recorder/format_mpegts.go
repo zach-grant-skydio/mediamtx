@@ -295,12 +295,15 @@ func (f *formatMPEGTS) initialize() bool {
 						}
 
 						return f.write(
-							timestampToDuration(tunit.PTS, 90000),
+							timestampToDuration(tunit.PTS, clockRate),
 							tunit.NTP,
 							false,
 							true,
 							func() error {
-								return f.mw.WriteKLV(track, multiplyAndDivide(tunit.PTS, 90000, 90000), tunit.Unit)
+								return f.mw.WriteKLV(
+									track,
+									tunit.PTS, // no conversion is needed since clock rate is 90khz in both MPEG-TS and RTSP
+									tunit.Unit)
 							},
 						)
 					})
@@ -396,6 +399,40 @@ func (f *formatMPEGTS) initialize() bool {
 								}
 
 								return nil
+							},
+						)
+					})
+
+			case *rtspformat.MPEGTS:
+				// Handle MPEG-TS streams (e.g., STANAG 4609 with video + KLV metadata)
+				// The MPEG-TS stream should be demuxed by the stream processing layer
+				// For now, we'll add a placeholder track to indicate MPEG-TS support
+				addTrack(forma, &mpegts.CodecH264{}) // Use H264 as placeholder since MPEG-TS likely contains video
+
+				f.ri.stream.AddReader(
+					f.ri,
+					media,
+					forma,
+					func(u unit.Unit) error {
+						tunit := u.(*unit.MPEGTS)
+						if tunit.Data == nil {
+							return nil
+						}
+
+						// Write MPEG-TS data directly to the recording file
+						// Since the data is already in MPEG-TS format, write it as-is
+						return f.write(
+							timestampToDuration(tunit.PTS, clockRate),
+							tunit.NTP,
+							false,
+							true,
+							func() error {
+								// Write raw MPEG-TS data directly to buffered writer
+								_, err := f.bw.Write(tunit.Data)
+								if err != nil {
+									return err
+								}
+								return f.bw.Flush()
 							},
 						)
 					})

@@ -167,6 +167,14 @@ func New(
 			Parent:             parent,
 		}
 
+	case *format.MPEGTS:
+		proc = &mpegts{
+			RTPMaxPayloadSize:  rtpMaxPayloadSize,
+			Format:             forma,
+			GenerateRTPPackets: generateRTPPackets,
+			Parent:             parent,
+		}
+
 	default:
 		proc = &generic{
 			RTPMaxPayloadSize:  rtpMaxPayloadSize,
